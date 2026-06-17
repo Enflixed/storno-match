@@ -19,9 +19,7 @@ Ein Widget, das Veranstalter auf ihrer Website einbinden:
 1. **Kunde A** klickt "Reise anbieten" → Widget erstellt anonymisiertes Listing
 2. **Kunde B** findet Listing → Stripe Checkout → Zahlung in Treuhand
 3. **Veranstalter** wird benachrichtigt → Umpersonalisierung → Payout
-
-**Keine Blockchain, keine Token, keine regulatorischen Hürden.**
-
+   
 ---
 
 ## Quick Start

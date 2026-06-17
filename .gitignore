@@ -46,3 +46,5 @@ dashboard/build/
 # Misc
 *.bak
 *.tmp
+.env
+.env.local

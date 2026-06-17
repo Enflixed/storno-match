@@ -95,8 +95,7 @@ model Customer {
   
   createdAt      DateTime @default(now())
   
-  transfersAsBuyer  Transfer[] @relation("BuyerTransfers")
-  transfersAsSeller Transfer[] @relation("SellerTransfers")
+
   
   @@map("customers")
 }

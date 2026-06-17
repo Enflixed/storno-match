@@ -143,18 +143,6 @@ npm run dev
 
 ---
 
-## Pricing
-
-| Plan | Monthly | Features |
-|------|---------|----------|
-| Starter | €149 | Basic widget, 20 trades/mo |
-| Professional | €199 | Advanced analytics, 50 trades/mo |
-| Enterprise | €299 | Custom branding, unlimited |
-
-Plus: €39 Transaktionsgebühr pro Trade
-
----
-
 ## Lizenz
 
 Proprietary — Alle Rechte vorbehalten (Enflixed GmbH)

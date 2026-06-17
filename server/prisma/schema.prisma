@@ -1,0 +1,262 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// ORGANIZATION / TRAVEL AGENCY
+// ─────────────────────────────────────────────
+model Organization {
+  id                String   @id @default(uuid())
+  name              String
+  subdomain         String   @unique
+  logoUrl           String?
+  stripeAccountId   String?  // Stripe Connect account ID
+  stripeOnboarded   Boolean  @default(false)
+  contactEmail      String
+  contactName       String
+  phone             String?
+  website           String?
+  
+  // Billing
+  plan              PlanType @default(STARTER)
+  subscriptionEnds  DateTime?
+  
+  // Settings
+  minPricePercent   Int      @default(50)  // Minimum price as % of original
+  maxPricePercent   Int      @default(100) // Maximum price as % of original
+  timeLockHours     Int      @default(72)  // Hours before departure when transfers stop
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  users             User[]
+  listings          Listing[]
+  transfers         Transfer[]
+  
+  @@map("organizations")
+}
+
+enum PlanType {
+  STARTER      // €149/mo
+  PROFESSIONAL // €199/mo
+  ENTERPRISE   // €299/mo
+}
+
+// ─────────────────────────────────────────────
+// USER (Admin/Staff of Organization)
+// ─────────────────────────────────────────────
+model User {
+  id             String   @id @default(uuid())
+  email          String   @unique
+  passwordHash   String
+  name           String
+  role           UserRole @default(STAFF)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  emailVerified  Boolean  @default(false)
+  lastLogin      DateTime?
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("users")
+}
+
+enum UserRole {
+  OWNER      // Full access
+  ADMIN      // Can manage staff & settings
+  STAFF      // Can manage listings & transfers
+  SUPPORT    // Read-only + support actions
+}
+
+// ─────────────────────────────────────────────
+// CUSTOMER (End customer of a travel agency)
+// Used for tracking but NOT stored directly for privacy
+// ─────────────────────────────────────────────
+model Customer {
+  id             String   @id @default(uuid())
+  email          String
+  name           String
+  phone          String?
+  
+  // FK to organization (for white-label lookup)
+  organizationId String
+  
+  // Hashed for privacy (not displayed in listings)
+  emailHash      String   @unique
+  phoneHash      String?  @unique
+  
+  createdAt      DateTime @default(now())
+  
+  transfersAsBuyer  Transfer[] @relation("BuyerTransfers")
+  transfersAsSeller Transfer[] @relation("SellerTransfers")
+  
+  @@map("customers")
+}
+
+// ─────────────────────────────────────────────
+// LISTING (Travel booking offered for resale)
+// ─────────────────────────────────────────────
+model Listing {
+  id               String        @id @default(uuid())
+  
+  // Organization (travel agency) this listing belongs to
+  organizationId   String
+  organization     Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  // Original booking info (anonymized for buyers)
+  originalBookingRef String      // Internal ref, never shown publicly
+  destination        String      // e.g. "Mallorca, Spanien"
+  departureDate       DateTime
+  returnDate          DateTime
+  originalPriceCents  Int         // in cents (e.g. 59900 = €599.00)
+  
+  // Seller sets the resale price
+  askingPriceCents    Int
+  currency            String      @default("EUR")
+  
+  // Description (from seller)
+  description         String?
+  
+  // Status
+  status              ListingStatus @default(ACTIVE)
+  
+  // Privacy
+  sellerNameAnonymous  String      // e.g. "Thomas M."
+  sellerEmailHash      String      // For notification
+  
+  // Stripe payment intent for this listing
+  stripePaymentIntentId String?
+  
+  // Expiration (auto-expire if not sold)
+  expiresAt           DateTime?
+  
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  
+  // Relations
+  transfers           Transfer[]
+  
+  @@map("listings")
+}
+
+enum ListingStatus {
+  ACTIVE       // Visible and purchasable
+  PENDING      // Payment in progress
+  SOLD         // Transferred to buyer
+  EXPIRED      // Past expiration date
+  CANCELLED    // Seller cancelled
+}
+
+// ─────────────────────────────────────────────
+// TRANSFER (Completed transaction)
+// ─────────────────────────────────────────────
+model Transfer {
+  id               String   @id @default(uuid())
+  
+  listingId        String
+  listing          Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  // Seller (original booker)
+  sellerId         String
+  sellerCustomerId String
+  sellerEmailHash  String
+  
+  // Buyer
+  buyerId          String
+  buyerCustomerId  String
+  buyerEmailHash   String
+  
+  // Payment
+  amountCents      Int       // What buyer paid
+  currency         String    @default("EUR")
+  
+  // Fees
+  platformFeeCents Int       // Our cut (€39 fixed)
+  creatorRoyaltyCents Int?   // Optional % to travel agency
+  sellerPayoutCents Int      // What seller receives
+  
+  // Stripe
+  stripePaymentIntentId String?
+  stripeTransferId      String?  // Payout to seller
+  stripeChargeId         String?
+  
+  // Status
+  status           TransferStatus @default(PENDING)
+  
+  // Reassignment
+  reassignmentStatus ReassignmentStatus @default(PENDING)
+  reassignmentNotes  String?
+  
+  // Timestamps
+  paidAt           DateTime?
+  completedAt      DateTime?
+  refundedAt       DateTime?
+  
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  
+  @@map("transfers")
+}
+
+enum TransferStatus {
+  PENDING           // Awaiting payment
+  PAID              // Payment received, in escrow
+  COMPLETED         // Transfer done, seller paid
+  REFUNDED          // Refunded to buyer
+  DISPUTED          // Under dispute
+  CANCELLED         // Cancelled by seller before payment
+}
+
+enum ReassignmentStatus {
+  PENDING           // Awaiting travel agency action
+  IN_PROGRESS       // Agency is processing
+  COMPLETED         // Successfully reassigned
+  REJECTED          // Agency rejected
+  FAILED            // Technical failure
+}
+
+// ─────────────────────────────────────────────
+// WEBHOOK LOG (Audit trail for Stripe)
+// ─────────────────────────────────────────────
+model WebhookEvent {
+  id              String   @id @default(uuid())
+  stripeEventId  String   @unique
+  type            String
+  processed       Boolean  @default(false)
+  processedAt     DateTime?
+  payload         Json
+  error           String?
+  
+  createdAt       DateTime @default(now())
+  
+  @@map("webhook_events")
+}
+
+// ─────────────────────────────────────────────
+// API KEY (For white-label widget auth)
+// ─────────────────────────────────────────────
+model ApiKey {
+  id              String   @id @default(uuid())
+  organizationId  String
+  keyHash         String   @unique  // Hashed API key
+  keyPrefix       String           // First 8 chars for identification
+  name            String           // e.g. "Production", "Test"
+  lastUsedAt      DateTime?
+  expiresAt       DateTime?
+  active          Boolean  @default(true)
+  
+  createdAt       DateTime @default(now())
+  
+  @@map("api_keys")
+}

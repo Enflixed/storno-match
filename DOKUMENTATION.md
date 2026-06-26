@@ -791,7 +791,7 @@ storno-match/
 1. 🔍 **Validierung** mit Branchenexperten
 2. 🏗️ **MVP fertigstellen** (Dashboard + Widget)
 3. 🎯 **3 Pilotkunden** gewinnen (kleine bis mittlere Veranstalter)
-4. 📈 **Skalieren** über Peakwork-Netzwerk
+4. 📈 **Skalieren** über Netzwerk
 
 ---
 

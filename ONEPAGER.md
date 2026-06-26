@@ -94,6 +94,26 @@ Reiseveranstalter
 4. 📈 **Skalieren** über Peakwork-Netzwerk
 
 ---
+## WIN WIN WIN?
+
+Für den ursprünglichen Kunden, also den Verkäufer, ist der Gewinn offensichtlich: Er bekommt bei einer Stornierung nicht nur die klassische Storno-Option, bei der oft ein großer Teil des Reisepreises verloren geht, sondern eine zweite Chance, noch Geld zurückzubekommen. Gerade bei teuren Pauschalreisen kann das emotional und finanziell ein riesiger Unterschied sein. Statt „Pech gehabt, Stornokosten zahlen“ entsteht eine Alternative: „Vielleicht übernimmt jemand meine Reise.“
+
+Für den neuen Kunden, also den Käufer, entsteht ebenfalls ein Vorteil: Er bekommt Zugang zu Reisen, die eventuell günstiger sind als der aktuelle Marktpreis oder kurzfristig sonst gar nicht mehr verfügbar wären. Besonders bei beliebten Hotels, Ferienzeiten oder kurzfristigen Abreisen kann das attraktiv sein. Er kauft nicht irgendein anonymes Schnäppchen, sondern ein konkretes Reisepaket, das bereits existiert.
+
+Für den Reiseveranstalter ist es spannend, weil er aus einer Storno-Situation wieder einen aktiven Vorgang mit Umsatz-, Service- und Kundenbindungspotenzial macht. Ohne Plattform wäre der ursprüngliche Kunde frustriert, der Platz/Reisebestand eventuell kompliziert zu verwerten, und der Veranstalter hätte trotzdem manuellen Aufwand. Mit StornoMatch könnte der Veranstalter kontrolliert moderieren: Welche Reisen dürfen angeboten werden, welche Fristen gelten, welche Umbuchungsgebühren fallen an, wie läuft die Umpersonalisierung?
+
+Der eigentliche Hebel ist: Du verwandelst eine negative Customer Journey in eine neutrale oder sogar positive.
+
+Normalerweise ist Storno für alle unangenehm:
+Kunde verliert Geld.
+Reiseveranstalter hat Support-Aufwand.
+Potenzielle Käufer sehen die Reise nie.
+
+Mit den Modell wird daraus:
+
+Kunde bekommt Geld zurück.
+Käufer bekommt ein attraktives Angebot.
+Veranstalter behält Kontrolle, reduziert Frust und kann den Vorgang strukturiert abwickeln.
 
 ## Kontakt
 

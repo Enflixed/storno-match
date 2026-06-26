@@ -48,3 +48,5 @@ dashboard/build/
 *.tmp
 .env
 .env.local
+server/prisma/dev.db
+server/prisma/dev.db-journal

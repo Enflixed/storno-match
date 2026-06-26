@@ -3,22 +3,38 @@ import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 import { authenticate, authenticateApiKey } from '../middleware/auth.js';
 import { createPaymentIntent, createTransfer, refundPayment } from '../services/stripe.js';
-import { sendNotification } from '../services/email.js';
 
 const router = Router();
 const prisma = new PrismaClient();
 
-// Platform fee: €39 fixed
 const PLATFORM_FEE_CENTS = 3900;
 
 // ─── POST /transfers ───
 // Buyer initiates purchase
 router.post('/', authenticateApiKey, async (req, res) => {
   try {
-    const { listingId, buyerName, buyerEmail, buyerPhone } = req.body;
+    const {
+      listingId,
+      // Buyer required fields
+      buyerSalutation,   // 'male' | 'female' | 'diverse'
+      buyerFirstName,
+      buyerLastName,
+      buyerBirthDate,
+      buyerEmail,
+      buyerPhone,
+      buyerNationality,
+      // Optional
+      buyerTitle,
+      buyerBirthPlace,
+      buyerStreet,
+      buyerHouseNumber,
+      buyerPostalCode,
+      buyerCity,
+      buyerCountry
+    } = req.body;
 
-    if (!listingId || !buyerName || !buyerEmail) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    if (!listingId || !buyerFirstName || !buyerLastName || !buyerEmail || !buyerBirthDate) {
+      return res.status(400).json({ error: 'Missing required buyer fields: firstName, lastName, email, birthDate' });
     }
 
     // Get listing
@@ -40,52 +56,113 @@ router.post('/', authenticateApiKey, async (req, res) => {
     const hoursUntilDeparture = (listing.departureDate - now) / (1000 * 60 * 60);
     
     if (hoursUntilDeparture <= listing.organization.timeLockHours) {
-      return res.status(400).json({ 
-        error: 'Transfer period has ended' 
-      });
+      return res.status(400).json({ error: 'Transfer period has ended' });
     }
 
-    // Check expiration
     if (listing.expiresAt && new Date(listing.expiresAt) < now) {
       return res.status(400).json({ error: 'Listing has expired' });
     }
 
-    // Create or find buyer customer
+    // Hash email for privacy
     const buyerEmailHash = crypto.createHash('sha256')
       .update(buyerEmail.toLowerCase()).digest('hex');
 
+    // Upsert buyer customer with ALL fields
     let buyer = await prisma.customer.findUnique({ where: { emailHash: buyerEmailHash } });
     
-    if (!buyer) {
+    if (buyer) {
+      // Update with new data
+      buyer = await prisma.customer.update({
+        where: { id: buyer.id },
+        data: {
+          firstName: buyerFirstName,
+          lastName: buyerLastName,
+          gender: buyerSalutation || null,
+          birthDate: buyerBirthDate ? new Date(buyerBirthDate) : null,
+          birthPlace: buyerBirthPlace || null,
+          title: buyerTitle || null,
+          street: buyerStreet || null,
+          houseNumber: buyerHouseNumber || null,
+          postalCode: buyerPostalCode || null,
+          city: buyerCity || null,
+          country: buyerCountry || null,
+          nationality: buyerNationality || null,
+          phone: buyerPhone || null
+        }
+      });
+    } else {
       buyer = await prisma.customer.create({
         data: {
           email: buyerEmail,
-          name: buyerName,
+          name: `${buyerFirstName} ${buyerLastName}`,
           phone: buyerPhone || null,
           emailHash: buyerEmailHash,
-          organizationId: listing.organizationId
+          organizationId: listing.organizationId,
+          gender: buyerSalutation || null,
+          firstName: buyerFirstName,
+          lastName: buyerLastName,
+          birthDate: new Date(buyerBirthDate),
+          birthPlace: buyerBirthPlace || null,
+          title: buyerTitle || null,
+          street: buyerStreet || null,
+          houseNumber: buyerHouseNumber || null,
+          postalCode: buyerPostalCode || null,
+          city: buyerCity || null,
+          country: buyerCountry || null,
+          nationality: buyerNationality || null
         }
       });
     }
 
     // Calculate fees
     const amountCents = listing.askingPriceCents;
-    const creatorRoyaltyCents = Math.round(amountCents * 0.05); // 5% optional royalty
-    const sellerPayoutCents = amountCents - PLATFORM_FEE_CENTS;
+    const creatorRoyaltyCents = Math.round(amountCents * 0.05);
+    const sellerPayoutCents = amountCents - PLATFORM_FEE_CENTS - creatorRoyaltyCents;
 
     // Create Stripe Payment Intent
-    const paymentIntent = await createPaymentIntent({
-      amount: amountCents,
-      currency: 'eur',
-      organizationId: listing.organizationId,
-      listingId: listing.id,
-      buyerEmail,
-      metadata: {
+    let paymentIntent;
+    if (process.env.DEMO_MODE === 'true') {
+      paymentIntent = {
+        id: 'pi_demo_' + crypto.randomBytes(8).toString('hex'),
+        client_secret: 'demo_secret_' + crypto.randomBytes(8).toString('hex'),
+        status: 'succeeded'
+      };
+    } else {
+      paymentIntent = await createPaymentIntent({
+        amount: amountCents,
+        currency: 'eur',
+        organizationId: listing.organizationId,
         listingId: listing.id,
-        buyerEmailHash,
-        sellerEmailHash: listing.sellerEmailHash,
-        organizationId: listing.organizationId
+        buyerEmail,
+        metadata: {
+          listingId: listing.id,
+          buyerEmailHash,
+          sellerEmailHash: listing.sellerEmailHash,
+          organizationId: listing.organizationId
+        }
+      });
+    }
+
+    // ─── ATOMIC: Reserve listing with race condition protection ───
+    const listingUpdate = await prisma.listing.updateMany({
+      where: {
+        id: listingId,
+        status: 'ACTIVE'
+      },
+      data: {
+        status: 'PENDING',
+        stripePaymentIntentId: paymentIntent.id
       }
+    });
+
+    if (listingUpdate.count === 0) {
+      return res.status(409).json({ error: 'Listing was purchased by another buyer' });
+    }
+    // ────────────────────────────────────────────────────────────────
+
+    // Look up seller
+    const seller = await prisma.customer.findUnique({
+      where: { emailHash: listing.sellerEmailHash }
     });
 
     // Create transfer record (PENDING)
@@ -93,8 +170,8 @@ router.post('/', authenticateApiKey, async (req, res) => {
       data: {
         listingId: listing.id,
         organizationId: listing.organizationId,
-        sellerId: 'pending', // Will be updated
-        sellerCustomerId: 'pending',
+        sellerId: seller?.id || 'unknown',
+        sellerCustomerId: seller?.id || 'unknown',
         sellerEmailHash: listing.sellerEmailHash,
         buyerId: buyer.id,
         buyerCustomerId: buyer.id,
@@ -109,22 +186,13 @@ router.post('/', authenticateApiKey, async (req, res) => {
       }
     });
 
-    // Update listing status
-    await prisma.listing.update({
-      where: { id: listingId },
-      data: { 
-        status: 'PENDING',
-        stripePaymentIntentId: paymentIntent.id
-      }
-    });
-
     res.status(201).json({
       message: 'Transfer initiated',
       transfer: {
         id: transfer.id,
         amountCents,
         amountEur: (amountCents / 100).toFixed(2),
-        platformFeeCents,
+        platformFeeCents: PLATFORM_FEE_CENTS,
         sellerPayoutCents,
         currency: 'EUR'
       },
@@ -132,67 +200,6 @@ router.post('/', authenticateApiKey, async (req, res) => {
     });
   } catch (err) {
     console.error('Create transfer error:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// ─── POST /transfers/:id/confirm-payment ───
-// Stripe webhook calls this after successful payment
-router.post('/:id/confirm-payment', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { paymentIntentId } = req.body;
-
-    const transfer = await prisma.transfer.findUnique({
-      where: { id },
-      include: { 
-        listing: true,
-        organization: true 
-      }
-    });
-
-    if (!transfer) {
-      return res.status(404).json({ error: 'Transfer not found' });
-    }
-
-    if (transfer.stripePaymentIntentId !== paymentIntentId) {
-      return res.status(400).json({ error: 'Payment intent mismatch' });
-    }
-
-    // Update transfer status
-    await prisma.transfer.update({
-      where: { id },
-      data: {
-        status: 'PAID',
-        paidAt: new Date()
-      }
-    });
-
-    // Update listing status
-    await prisma.listing.update({
-      where: { id: transfer.listingId },
-      data: { status: 'SOLD' }
-    });
-
-    // Notify travel agency
-    await sendNotification({
-      to: transfer.organization.contactEmail,
-      template: 'transfer_received',
-      data: {
-        organizationName: transfer.organization.name,
-        destination: transfer.listing.destination,
-        departureDate: transfer.listing.departureDate,
-        amountEur: (transfer.amountCents / 100).toFixed(2),
-        transferId: transfer.id
-      }
-    });
-
-    // Notify seller
-    // In production, would send email to the seller
-
-    res.json({ message: 'Payment confirmed', status: 'PAID' });
-  } catch (err) {
-    console.error('Confirm payment error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -209,14 +216,7 @@ router.get('/:id', authenticate, async (req, res) => {
           select: {
             destination: true,
             departureDate: true,
-            returnDate: true,
             originalBookingRef: true
-          }
-        },
-        organization: {
-          select: {
-            name: true,
-            subdomain: true
           }
         }
       }
@@ -226,14 +226,46 @@ router.get('/:id', authenticate, async (req, res) => {
       return res.status(404).json({ error: 'Transfer not found' });
     }
 
-    // Check authorization
-    if (transfer.organizationId !== req.user.organizationId && 
-        transfer.sellerEmailHash !== req.user.emailHash &&
-        transfer.buyerEmailHash !== req.user.emailHash) {
+    if (transfer.organizationId !== req.user.organizationId) {
       return res.status(403).json({ error: 'Not authorized' });
     }
 
-    res.json({ transfer });
+    // Get full buyer data (PRIVATE - admin only)
+    const buyer = await prisma.customer.findUnique({
+      where: { id: transfer.buyerCustomerId }
+    });
+
+    const seller = await prisma.customer.findUnique({
+      where: { id: transfer.sellerCustomerId }
+    });
+
+    res.json({
+      transfer: {
+        ...transfer,
+        // FULL buyer data - only visible to admin
+        buyer: buyer ? {
+          firstName: buyer.firstName,
+          lastName: buyer.lastName,
+          title: buyer.title,
+          gender: buyer.gender,
+          birthDate: buyer.birthDate,
+          birthPlace: buyer.birthPlace,
+          nationality: buyer.nationality,
+          street: buyer.street,
+          houseNumber: buyer.houseNumber,
+          postalCode: buyer.postalCode,
+          city: buyer.city,
+          country: buyer.country,
+          email: buyer.email,
+          phone: buyer.phone
+        } : null,
+        // Seller full data
+        seller: seller ? {
+          firstName: seller.firstName,
+          lastName: seller.lastName
+        } : null
+      }
+    });
   } catch (err) {
     console.error('Get transfer error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -264,7 +296,22 @@ router.get('/', authenticate, async (req, res) => {
           listing: {
             select: {
               destination: true,
-              departureDate: true
+              departureDate: true,
+              originalBookingRef: true,
+              askingPriceCents: true
+            }
+          },
+          buyerCustomer: {
+            select: {
+              firstName: true,
+              lastName: true
+              // NO email or sensitive fields in public list view
+            }
+          },
+          sellerCustomer: {
+            select: {
+              firstName: true,
+              lastName: true
             }
           }
         }
@@ -273,7 +320,25 @@ router.get('/', authenticate, async (req, res) => {
     ]);
 
     res.json({
-      transfers,
+      transfers: transfers.map(t => ({
+        id: t.id,
+        status: t.status,
+        amountCents: t.amountCents,
+        currency: t.currency,
+        paidAt: t.paidAt,
+        completedAt: t.completedAt,
+        createdAt: t.createdAt,
+        listing: t.listing,
+        buyer: {
+          firstName: t.buyerCustomer?.firstName,
+          lastName: t.buyerCustomer?.lastName,
+          email: t.buyerCustomer?.email
+        },
+        seller: {
+          firstName: t.sellerCustomer?.firstName,
+          lastName: t.sellerCustomer?.lastName
+        }
+      })),
       pagination: {
         total,
         limit: parseInt(limit),
@@ -288,7 +353,6 @@ router.get('/', authenticate, async (req, res) => {
 });
 
 // ─── POST /transfers/:id/complete ───
-// Travel agency completes the reassignment
 router.post('/:id/complete', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
@@ -312,15 +376,20 @@ router.post('/:id/complete', authenticate, async (req, res) => {
     }
 
     // Create payout to seller via Stripe
-    const payout = await createTransfer({
-      amount: transfer.sellerPayoutCents,
-      currency: 'eur',
-      destinationAccountId: transfer.organization.stripeAccountId,
-      metadata: {
-        transferId: transfer.id,
-        type: 'seller_payout'
-      }
-    });
+    let payout;
+    if (process.env.DEMO_MODE === 'true') {
+      payout = { id: 'po_demo_' + crypto.randomBytes(8).toString('hex') };
+    } else {
+      payout = await createTransfer({
+        amount: transfer.sellerPayoutCents,
+        currency: 'eur',
+        destinationAccountId: transfer.organization.stripeAccountId,
+        metadata: {
+          transferId: transfer.id,
+          type: 'seller_payout'
+        }
+      });
+    }
 
     await prisma.transfer.update({
       where: { id },
@@ -333,9 +402,6 @@ router.post('/:id/complete', authenticate, async (req, res) => {
       }
     });
 
-    // Notify buyer their booking is confirmed
-    // In production, would send confirmation email
-
     res.json({ 
       message: 'Transfer completed successfully',
       status: 'COMPLETED',
@@ -347,8 +413,49 @@ router.post('/:id/complete', authenticate, async (req, res) => {
   }
 });
 
+// ─── POST /transfers/:id/confirm-payment ───
+// Buyer confirms they have paid (demo flow)
+router.post('/:id/confirm-payment', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const transfer = await prisma.transfer.findUnique({
+      where: { id }
+    });
+
+    if (!transfer) {
+      return res.status(404).json({ error: 'Transfer not found' });
+    }
+
+    if (transfer.status !== 'PENDING') {
+      return res.status(400).json({ error: 'Transfer is not pending payment' });
+    }
+
+    const updated = await prisma.transfer.update({
+      where: { id },
+      data: {
+        status: 'PAID',
+        paidAt: new Date()
+      }
+    });
+
+    // Also update listing status
+    await prisma.listing.update({
+      where: { id: transfer.listingId },
+      data: { status: 'SOLD' }
+    });
+
+    res.json({ 
+      message: 'Payment confirmed',
+      transfer: { id: updated.id, status: updated.status }
+    });
+  } catch (err) {
+    console.error('Confirm payment error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // ─── POST /transfers/:id/reject ───
-// Travel agency rejects the transfer
 router.post('/:id/reject', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
@@ -367,35 +474,83 @@ router.post('/:id/reject', authenticate, async (req, res) => {
       return res.status(403).json({ error: 'Not authorized' });
     }
 
+    if (!['PENDING', 'PAID'].includes(transfer.status)) {
+      return res.status(400).json({ error: 'Cannot reject this transfer' });
+    }
+
+    // Refund if paid
+    if (transfer.status === 'PAID' && transfer.stripePaymentIntentId) {
+      if (process.env.DEMO_MODE !== 'true') {
+        await refundPayment(transfer.stripePaymentIntentId);
+      }
+    }
+
+    const [updatedTransfer] = await Promise.all([
+      prisma.transfer.update({
+        where: { id },
+        data: {
+          status: 'REFUNDED',
+          reassignmentStatus: 'REJECTED',
+          reassignmentNotes: reason || null,
+          refundedAt: new Date()
+        }
+      }),
+      prisma.listing.update({
+        where: { id: transfer.listingId },
+        data: {
+          status: 'ACTIVE',
+          stripePaymentIntentId: null
+        }
+      })
+    ]);
+
+    res.json({ 
+      message: 'Transfer rejected and refund initiated',
+      transfer: { id: updatedTransfer.id, status: updatedTransfer.status }
+    });
+  } catch (err) {
+    console.error('Reject transfer error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── POST /transfers/:id/confirm-seller ───
+// Seller confirms the reassignment
+router.post('/:id/confirm-seller', authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { notes } = req.body;
+
+    const transfer = await prisma.transfer.findUnique({
+      where: { id }
+    });
+
+    if (!transfer) {
+      return res.status(404).json({ error: 'Transfer not found' });
+    }
+
+    if (transfer.sellerEmailHash !== req.user.emailHash) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+
     if (transfer.status !== 'PAID') {
       return res.status(400).json({ error: 'Transfer must be paid first' });
     }
 
-    // Refund buyer
-    await refundPayment(transfer.stripePaymentIntentId);
-
-    await prisma.transfer.update({
+    const updated = await prisma.transfer.update({
       where: { id },
       data: {
-        status: 'REFUNDED',
-        reassignmentStatus: 'REJECTED',
-        reassignmentNotes: reason || 'Rejected by travel agency',
-        refundedAt: new Date()
+        reassignmentStatus: 'IN_PROGRESS',
+        reassignmentNotes: notes || null
       }
     });
 
-    // Reset listing
-    await prisma.listing.update({
-      where: { id: transfer.listingId },
-      data: { status: 'ACTIVE' }
-    });
-
     res.json({ 
-      message: 'Transfer rejected, buyer refunded',
-      status: 'REFUNDED'
+      message: 'Reassignment confirmed by seller',
+      transfer: { id: updated.id, reassignmentStatus: updated.reassignmentStatus }
     });
   } catch (err) {
-    console.error('Reject transfer error:', err);
+    console.error('Confirm seller error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

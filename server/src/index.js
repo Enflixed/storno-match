@@ -52,6 +52,10 @@ app.get('/health', (req, res) => {
   });
 });
 
+// ─── Static Files (Widget + Dashboard) ───
+app.use('/widget', express.static('../widget'));
+app.use('/dashboard', express.static('../dashboard'));
+
 // ─── API Routes ───
 app.use('/api/auth', authRoutes);
 app.use('/api/listings', listingRoutes);

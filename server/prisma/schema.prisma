@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -21,16 +21,16 @@ model Organization {
   contactName       String
   phone             String?
   website           String?
-  
+
   // Billing
-  plan              PlanType @default(STARTER)
+  plan              String   @default("STARTER")
   subscriptionEnds  DateTime?
-  
+
   // Settings
   minPricePercent   Int      @default(50)  // Minimum price as % of original
   maxPricePercent   Int      @default(100) // Maximum price as % of original
   timeLockHours     Int      @default(72)  // Hours before departure when transfers stop
-  
+
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -38,15 +38,11 @@ model Organization {
   users             User[]
   listings          Listing[]
   transfers         Transfer[]
-  
+
   @@map("organizations")
 }
 
-enum PlanType {
-  STARTER      // €149/mo
-  PROFESSIONAL // €199/mo
-  ENTERPRISE   // €299/mo
-}
+// PlanType: STARTER | PROFESSIONAL | ENTERPRISE
 
 // ─────────────────────────────────────────────
 // USER (Admin/Staff of Organization)
@@ -56,25 +52,20 @@ model User {
   email          String   @unique
   passwordHash   String
   name           String
-  role           UserRole @default(STAFF)
+  role           String   @default("STAFF")
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  
+
   emailVerified  Boolean  @default(false)
   lastLogin      DateTime?
-  
+
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   @@map("users")
 }
 
-enum UserRole {
-  OWNER      // Full access
-  ADMIN      // Can manage staff & settings
-  STAFF      // Can manage listings & transfers
-  SUPPORT    // Read-only + support actions
-}
+// UserRole: OWNER | ADMIN | STAFF | SUPPORT
 
 // ─────────────────────────────────────────────
 // CUSTOMER (End customer of a travel agency)
@@ -93,9 +84,33 @@ model Customer {
   emailHash      String   @unique
   phoneHash      String?  @unique
   
+  // ─── BUYER B - Required for flight booking ───
+  // Salutation: male | female | diverse
+  gender           String?
+  // First name (Vorname)
+  firstName        String?
+  // Last name (Nachname)
+  lastName         String?
+  // Date of birth (Geburtsdatum)
+  birthDate        DateTime?
+  // Birth place (Geburtsort)
+  birthPlace       String?
+  // Title (Titel) - optional
+  title            String?
+  // Full address
+  street           String?
+  houseNumber      String?
+  postalCode       String?
+  city             String?
+  country          String?
+  // Nationality (e.g. "DE", "AT", "CH")
+  nationality      String?
+  
   createdAt      DateTime @default(now())
   
-
+  // Relations
+  buyerOf         Transfer[] @relation("BuyerCustomer")
+  sellerOf        Transfer[] @relation("SellerCustomer")
   
   @@map("customers")
 }
@@ -105,125 +120,139 @@ model Customer {
 // ─────────────────────────────────────────────
 model Listing {
   id               String        @id @default(uuid())
-  
+
   // Organization (travel agency) this listing belongs to
   organizationId   String
   organization     Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  
+
   // Original booking info (anonymized for buyers)
   originalBookingRef String      // Internal ref, never shown publicly
   destination        String      // e.g. "Mallorca, Spanien"
-  departureDate       DateTime
-  returnDate          DateTime
+  departureDate       DateTime?
+  returnDate          DateTime?
   originalPriceCents  Int         // in cents (e.g. 59900 = €599.00)
-  
+
   // Seller sets the resale price
   askingPriceCents    Int
   currency            String      @default("EUR")
-  
+
   // Description (from seller)
   description         String?
-  
+
   // Status
-  status              ListingStatus @default(ACTIVE)
-  
+  status              String   @default("DRAFT")
+
+  // Rejection reason (when status = REJECTED)
+  rejectionReason     String?
+
   // Privacy
   sellerNameAnonymous  String      // e.g. "Thomas M."
   sellerEmailHash      String      // For notification
-  
+  sellerReason         String?     // Why was booking cancelled
+
+  // ─── FLIGHT DETAILS ───
+  departureAirport    String?
+  arrivalAirport      String?
+  flightOutboundDate  DateTime?
+  flightOutboundTime  String?
+  flightReturnDate    DateTime?
+  flightReturnTime    String?
+  airline             String?
+  flightNumber        String?
+  baggage             String?      // e.g. "1x23kg + Handgepäck"
+
+  // ─── HOTEL DETAILS ───
+  hotelName           String?
+  hotelStars          Int?         // 1-5, from seller
+  hotelStarsVerified  Int?         // 1-5, verified by admin (can differ)
+  hotelAddress        String?
+  hotelMapEmbed       String?      // Auto-generated from address, admin can override
+  roomCategory        String?      // e.g. "Deluxe, Meerblick, 32m2"
+  boardType           String?      // AI | HP | BB | SC
+
+  // ─── TRANSFER DETAILS ───
+  transferIncluded    Boolean  @default(false)
+  transferType        String?      // PRIVAT | SHUTTLE | SELBST
+
   // Stripe payment intent for this listing
   stripePaymentIntentId String?
-  
+
   // Expiration (auto-expire if not sold)
   expiresAt           DateTime?
-  
+
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
-  
+
   // Relations
   transfers           Transfer[]
-  
+
   @@map("listings")
 }
 
-enum ListingStatus {
-  ACTIVE       // Visible and purchasable
-  PENDING      // Payment in progress
-  SOLD         // Transferred to buyer
-  EXPIRED      // Past expiration date
-  CANCELLED    // Seller cancelled
-}
+// ListingStatus: DRAFT | PENDING_APPROVAL | ACTIVE | PENDING | SOLD | EXPIRED | CANCELLED | REJECTED
+// BoardType: AI | HP | BB | SC
+// TransferType: PRIVAT | SHUTTLE | SELBST
 
 // ─────────────────────────────────────────────
 // TRANSFER (Completed transaction)
 // ─────────────────────────────────────────────
 model Transfer {
   id               String   @id @default(uuid())
-  
+
   listingId        String
   listing          Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  
+
   organizationId   String
   organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  
+
   // Seller (original booker)
   sellerId         String
   sellerCustomerId String
   sellerEmailHash  String
-  
+
   // Buyer
   buyerId          String
   buyerCustomerId  String
   buyerEmailHash   String
-  
+
+  // Relations
+  buyerCustomer    Customer? @relation("BuyerCustomer", fields: [buyerCustomerId], references: [id], onDelete: Cascade)
+  sellerCustomer   Customer? @relation("SellerCustomer", fields: [sellerCustomerId], references: [id], onDelete: Cascade)
+
   // Payment
   amountCents      Int       // What buyer paid
   currency         String    @default("EUR")
-  
+
   // Fees
   platformFeeCents Int       // Our cut (€39 fixed)
   creatorRoyaltyCents Int?   // Optional % to travel agency
   sellerPayoutCents Int      // What seller receives
-  
+
   // Stripe
   stripePaymentIntentId String?
   stripeTransferId      String?  // Payout to seller
   stripeChargeId         String?
-  
+
   // Status
-  status           TransferStatus @default(PENDING)
-  
+  status           String   @default("PENDING")
+
   // Reassignment
-  reassignmentStatus ReassignmentStatus @default(PENDING)
+  reassignmentStatus String   @default("PENDING")
   reassignmentNotes  String?
-  
+
   // Timestamps
   paidAt           DateTime?
   completedAt      DateTime?
   refundedAt       DateTime?
-  
+
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
-  
+
   @@map("transfers")
 }
 
-enum TransferStatus {
-  PENDING           // Awaiting payment
-  PAID              // Payment received, in escrow
-  COMPLETED         // Transfer done, seller paid
-  REFUNDED          // Refunded to buyer
-  DISPUTED          // Under dispute
-  CANCELLED         // Cancelled by seller before payment
-}
-
-enum ReassignmentStatus {
-  PENDING           // Awaiting travel agency action
-  IN_PROGRESS       // Agency is processing
-  COMPLETED         // Successfully reassigned
-  REJECTED          // Agency rejected
-  FAILED            // Technical failure
-}
+// TransferStatus: PENDING | PAID | COMPLETED | REFUNDED | DISPUTED | CANCELLED
+// ReassignmentStatus: PENDING | IN_PROGRESS | COMPLETED | REJECTED | FAILED
 
 // ─────────────────────────────────────────────
 // WEBHOOK LOG (Audit trail for Stripe)
@@ -234,11 +263,11 @@ model WebhookEvent {
   type            String
   processed       Boolean  @default(false)
   processedAt     DateTime?
-  payload         Json
+  payload         String
   error           String?
-  
+
   createdAt       DateTime @default(now())
-  
+
   @@map("webhook_events")
 }
 
@@ -254,8 +283,8 @@ model ApiKey {
   lastUsedAt      DateTime?
   expiresAt       DateTime?
   active          Boolean  @default(true)
-  
+
   createdAt       DateTime @default(now())
-  
+
   @@map("api_keys")
 }

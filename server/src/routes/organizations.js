@@ -7,38 +7,6 @@ import { createConnectAccount, createAccountLink, getConnectAccountStatus } from
 const router = Router();
 const prisma = new PrismaClient();
 
-// ─── GET /organizations/:subdomain ───
-// Public: get organization info for widget
-router.get('/:subdomain', async (req, res) => {
-  try {
-    const { subdomain } = req.params;
-
-    const org = await prisma.organization.findUnique({
-      where: { subdomain },
-      select: {
-        id: true,
-        name: true,
-        subdomain: true,
-        logoUrl: true,
-        stripeOnboarded: true,
-        minPricePercent: true,
-        maxPricePercent: true,
-        timeLockHours: true,
-        website: true
-      }
-    });
-
-    if (!org) {
-      return res.status(404).json({ error: 'Organization not found' });
-    }
-
-    res.json({ organization: org });
-  } catch (err) {
-    console.error('Get organization error:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
 // ─── GET /organizations ───
 router.get('/', authenticate, async (req, res) => {
   try {
@@ -195,6 +163,38 @@ router.get('/stats', authenticate, async (req, res) => {
     });
   } catch (err) {
     console.error('Get stats error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── GET /organizations/:subdomain ───
+// Public: get organization info for widget (MUST be last - catches all /organizations/*)
+router.get('/:subdomain', async (req, res) => {
+  try {
+    const { subdomain } = req.params;
+
+    const org = await prisma.organization.findUnique({
+      where: { subdomain },
+      select: {
+        id: true,
+        name: true,
+        subdomain: true,
+        logoUrl: true,
+        stripeOnboarded: true,
+        minPricePercent: true,
+        maxPricePercent: true,
+        timeLockHours: true,
+        website: true
+      }
+    });
+
+    if (!org) {
+      return res.status(404).json({ error: 'Organization not found' });
+    }
+
+    res.json({ organization: org });
+  } catch (err) {
+    console.error('Get organization error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

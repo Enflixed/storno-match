@@ -450,7 +450,7 @@ model WebhookEvent {
     "email": "max@reiseveranstalter.de",
     "role": "OWNER"
   },
-  "apiKey": "sk_abc123...",  // ⚠️ Nur dieses eine Mal!
+  "apiKey": "**************", 
   "tokens": {
     "accessToken": "eyJ...",
     "refreshToken": "eyJ..."

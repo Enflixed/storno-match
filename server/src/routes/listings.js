@@ -190,7 +190,7 @@ router.get('/', async (req, res) => {
 });
 
 // ─── GET /listings/:id ───
-router.get('/:id', async (req, res) => {
+router.get('/:id', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -213,16 +213,11 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Listing not found' });
     }
 
-    // SECURITY: Only expose ACTIVE listings publicly
-    if (listing.status !== 'ACTIVE') {
-      return res.status(404).json({ error: 'Listing not found' });
-    }
-
-    // Check time lock
+    // Check time lock (skip for authenticated admins)
     const now = new Date();
     const hoursUntilDeparture = (listing.departureDate - now) / (1000 * 60 * 60);
     
-    if (hoursUntilDeparture <= listing.organization.timeLockHours) {
+    if (!req.user && hoursUntilDeparture <= listing.organization.timeLockHours) {
       return res.status(410).json({ 
         error: 'Transfer period has ended',
         timeLockHours: listing.organization.timeLockHours

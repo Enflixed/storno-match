@@ -7,6 +7,15 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Seeding database...');
 
+  // Clean up existing data (idempotent seed)
+  await prisma.transfer.deleteMany();
+  await prisma.listing.deleteMany();
+  await prisma.customer.deleteMany();
+  await prisma.organization.deleteMany();
+  await prisma.user.deleteMany();
+  await prisma.apiKey.deleteMany();
+  console.log('✓ Cleaned existing data');
+
   // Create test organization
   const org = await prisma.organization.create({
     data: {

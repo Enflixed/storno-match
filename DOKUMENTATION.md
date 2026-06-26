@@ -583,7 +583,7 @@ model WebhookEvent {
 ### 9.1 Anonymisierung
 
 - **Käufer sieht:** Nur `sellerNameAnonymous` (z.B. "Thomas M.")
-- **Email/Phone:** NIEMALS in Listings暴露 — nur SHA-256 Hashes
+- **Email/Phone:** NIEMALS in Listings — nur SHA-256 Hashes
 - **Buchungsreferenz:** Nur intern, nie öffentlich
 
 ### 9.2 Authentifizierung

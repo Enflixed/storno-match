@@ -13,7 +13,6 @@
 **Typ:** B2B White-Label SaaS (Software-as-a-Service)  
 **Website:** storno-match.com  
 **GitHub:** github.com/Enflixed/storno-match  
-**Firma:** Enflixed GmbH
 
 ### Das Problem
 
@@ -451,7 +450,7 @@ model WebhookEvent {
     "email": "max@reiseveranstalter.de",
     "role": "OWNER"
   },
-  "apiKey": "sk_abc123...",  // ⚠️ Nur dieses eine Mal!
+  "apiKey": "**************", 
   "tokens": {
     "accessToken": "eyJ...",
     "refreshToken": "eyJ..."
@@ -584,7 +583,7 @@ model WebhookEvent {
 ### 9.1 Anonymisierung
 
 - **Käufer sieht:** Nur `sellerNameAnonymous` (z.B. "Thomas M.")
-- **Email/Phone:** NIEMALS in Listings暴露 — nur SHA-256 Hashes
+- **Email/Phone:** NIEMALS in Listings — nur SHA-256 Hashes
 - **Buchungsreferenz:** Nur intern, nie öffentlich
 
 ### 9.2 Authentifizierung
@@ -792,15 +791,14 @@ storno-match/
 1. 🔍 **Validierung** mit Branchenexperten
 2. 🏗️ **MVP fertigstellen** (Dashboard + Widget)
 3. 🎯 **3 Pilotkunden** gewinnen (kleine bis mittlere Veranstalter)
-4. 📈 **Skalieren** über Peakwork-Netzwerk
+4. 📈 **Skalieren** über Netzwerk
 
 ---
 
 ## 17. Kontakt
 
-**Dennis**  
-Head of E-Commerce, Condor Holidays  
-Telegram: @Daytrader16014
+**Dennis Magli**  
+E-Commerce Manager
 
 ---
 

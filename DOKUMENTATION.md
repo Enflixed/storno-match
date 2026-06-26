@@ -798,8 +798,7 @@ storno-match/
 ## 17. Kontakt
 
 **Dennis**  
-Head of E-Commerce, Condor Holidays  
-Telegram: @Daytrader16014
+Head of E-Commerce - Condor Holidays
 
 ---
 

@@ -13,7 +13,6 @@
 **Typ:** B2B White-Label SaaS (Software-as-a-Service)  
 **Website:** storno-match.com  
 **GitHub:** github.com/Enflixed/storno-match  
-**Firma:** Enflixed GmbH
 
 ### Das Problem
 

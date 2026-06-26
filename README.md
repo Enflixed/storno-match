@@ -1,6 +1,6 @@
 # StornoMatch
 
-**B2B White Label Zweitmarkt für Reiseveranstalter**
+**B2B White Label Zweitmarkt für Pauschalreisen**
 
 > Ermöglicht Reiseveranstaltern, ihren Kunden einen automatisierten Weiterverkauf von stornierten Buchungen anzubieten — ohne manuelle Bearbeitung.
 
@@ -8,18 +8,19 @@
 
 ## Das Problem
 
-- Kunden: Buchungen sind illiquide. Stornogebühren liegen bei **50-80%**. Reiserücktrittsversicherungen decken nur Härtefälle ab.
-- Veranstalter: Manuelle Stornierung + Support + keine Einnahmen aus informellem Weiterverkauf.
-- Marktlücke: Kein White-Label-SaaS für genau dieses Problem.
+- **Kunden:** Buchungen sind illiquide. Stornogebühren liegen bei **50–80%**. Reiserücktrittsversicherungen decken nur Härtefälle ab.
+- **Veranstalter:** Manuelle Stornierung + Support + keine Einnahmen aus informellem Weiterverkauf.
+- **Marktlücke:** Kein White-Label-SaaS für genau dieses Problem.
 
 ## Die Lösung
 
 Ein Widget, das Veranstalter auf ihrer Website einbinden:
 
-1. **Kunde A** klickt "Reise anbieten" → Widget erstellt anonymisiertes Listing
-2. **Kunde B** findet Listing → Stripe Checkout → Zahlung in Treuhand
-3. **Veranstalter** wird benachrichtigt → Umpersonalisierung → Payout
-   
+1. **Kunde A** klickt "Reise anbieten" → Formular ausfüllen → Request geht zur Freigabe
+2. **Admin** des Reiseveranstalters füllt Flugdaten ein → Listing freigeben
+3. **Kunde B** findet Listing → Stripe Checkout → Zahlung in Treuhand
+4. **Admin** bestätigt Umpersonalisierung → Payout an Kunde A
+
 ---
 
 ## Quick Start
@@ -27,35 +28,56 @@ Ein Widget, das Veranstalter auf ihrer Website einbinden:
 ### Voraussetzungen
 
 - Node.js 18+
-- PostgreSQL 14+
-- Stripe Account
+- npm
 
 ### Backend starten
 
 ```bash
 cd server
-cp .env.example .env
-# Edit .env with your credentials
+cp .env.example .env   # Edit .env with your credentials
 npm install
 npx prisma generate
 npx prisma db push
+npm run db:seed        # Testdaten einsäen
 npm run dev
 ```
 
-### Frontend (Dashboard) starten
+**Test-Login:** `admin@mallorca-tours.de` / `admin123`
 
-```bash
-cd dashboard
-npm install
-npm run dev
-```
+### Widgets öffnen
 
-### Widget einbetten
+| URL | Beschreibung |
+|-----|--------------|
+| `http://localhost:3000/widget/` | Widget-Übersicht |
+| `http://localhost:3000/widget/seller.html` | Seller Widget (Formular) |
+| `http://localhost:3000/dashboard/` | Admin Dashboard |
+
+### Buyer Widget einbetten
 
 ```html
-<script src="https://deine-domain.com/widget.js"></script>
-<div id="storno-match-widget" data-org="mein-reiseveranstalter"></div>
+<script src="https://deine-domain.com/widget/widget.js"></script>
+<div id="storno-match-widget"></div>
+<script>
+  window.STORNOMATCH_ORG = 'mallorca';
+  window.STORNOMATCH_API = 'https://deine-domain.com';
+</script>
 ```
+
+---
+
+## Aktueller Stand
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| Backend API | ✅ Fertig | Express + Prisma |
+| Buyer Widget | ✅ Fertig | Vanilla JS, iframe-ready |
+| Seller Widget | ✅ Fertig | Standalone HTML |
+| Admin Dashboard | ✅ Fertig | Vanilla JS/HTML |
+| Database | ✅ Fertig | SQLite (dev), PostgreSQL (prod) |
+| Stripe Connect | ⚠️ Demo Mode | DEMO_MODE=true, kein echter Transfer |
+| Email | ⚠️ Mock | Logs to console |
+| Maps | ✅ Fertig | OpenStreetMap/Nominatim, kein API Key |
+| Seed Script | ✅ Fertig | `npm run db:seed` |
 
 ---
 
@@ -64,10 +86,11 @@ npm run dev
 | Layer | Technology |
 |-------|------------|
 | Backend | Node.js + Express + Prisma |
-| Database | PostgreSQL |
-| Frontend | React + Vite |
-| Payments | Stripe Connect |
-| Email | Resend |
+| Database | SQLite (dev) / PostgreSQL (prod) |
+| Frontend (Dashboard) | Vanilla JS + HTML |
+| Frontend (Widget) | Vanilla JS (kein Framework) |
+| Payments | Stripe Connect (Demo Mode) |
+| Maps | OpenStreetMap / Nominatim |
 | Hosting | Railway (Backend) + Vercel (Frontend) |
 
 ---
@@ -75,69 +98,76 @@ npm run dev
 ## Architektur
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    STORNOMATCH PLATFORM                     │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  ┌──────────────┐     ┌──────────────┐     ┌─────────────┐  │
-│  │   Widget     │     │   Dashboard  │     │    API      │  │
-│  │  (VanillaJS) │     │    (React)   │     │  (REST)     │  │
-│  └──────────────┘     └──────────────┘     └─────────────┘  │
-│         │                    │                    │         │
-│         └────────────────────┼────────────────────┘         │
-│                              │                              │
-│                    ┌─────────▼─────────┐                    │
-│                    │     Express API    │                   │
-│                    │  (Authentication)  │                   │
-│                    └─────────┬─────────┘                    │
-│                              │                              │
-│          ┌───────────────────┼───────────────────┐          │
-│          │                   │                   │          │
-│  ┌───────▼───────┐   ┌───────▼───────┐   ┌────── ▼─────┐    │
-│  │  PostgreSQL   │  │    Stripe      │   │   Resend    │    │
-│  │   (Prisma)    │  │   Connect      │   │   (Email)   │    │
-│  └───────────────┘   └───────────────┘   └─────────────┘    │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                    STORNOMATCH PLATFORM                       │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
+│  │ Buyer Widget │  │ Seller Widget│  │  Admin Dashboard  │  │
+│  │ Vanilla JS   │  │ Standalone   │  │  Vanilla JS/HTML  │  │
+│  │ iframe-ready │  │ HTML+JS      │  │                  │  │
+│  └──────────────┘  └──────────────┘  └──────────────────┘  │
+│         │                  │                    │              │
+│         │   API Key       │    JWT Auth        │              │
+│         └──────────────────┼────────────────────┘              │
+│                            │                                   │
+│                   ┌────────▼────────┐                          │
+│                   │  Express API    │                          │
+│                   │  Port 3000      │                          │
+│                   └────────┬────────┘                          │
+│                            │                                   │
+│         ┌──────────────────┼──────────────────┐               │
+│         │                  │                  │               │
+│  ┌──────▼──────┐  ┌───────▼─────┐  ┌───────▼──────┐       │
+│  │  SQLite /    │  │   Stripe    │  │  Nominatim   │       │
+│  │  PostgreSQL  │  │  Connect    │  │  (Maps)      │       │
+│  └──────────────┘  └─────────────┘  └──────────────┘       │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## API Endpoints
+## Dateistruktur
 
-### Authentication
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/auth/register` | Register new organization |
-| POST | `/api/auth/login` | Login |
-| POST | `/api/auth/refresh` | Refresh token |
-
-### Listings
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/listings` | List active listings |
-| GET | `/api/listings/:id` | Get listing details |
-| POST | `/api/listings` | Create listing (API key) |
-| PUT | `/api/listings/:id` | Update listing |
-| DELETE | `/api/listings/:id` | Cancel listing |
-
-### Transfers
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/transfers` | List transfers |
-| GET | `/api/transfers/:id` | Get transfer details |
-| POST | `/api/transfers` | Initiate purchase |
-| POST | `/api/transfers/:id/complete` | Confirm reassignment |
-| POST | `/api/transfers/:id/reject` | Reject transfer |
-
-### Webhooks
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/webhooks/stripe` | Stripe webhook handler |
+```
+storno-match/
+├── README.md
+├── ONEPAGER.md
+├── DOKUMENTATION.md
+│
+├── server/
+│   ├── package.json
+│   ├── .env
+│   ├── prisma/
+│   │   ├── schema.prisma       # Datenmodell (SQLite)
+│   │   ├── seed.js            # Testdaten
+│   │   └── dev.db             # Lokale SQLite DB (gitignored)
+│   └── src/
+│       ├── index.js            # Express App
+│       ├── middleware/
+│       │   └── auth.js         # JWT + API Key Auth
+│       ├── routes/
+│       │   ├── auth.js         # Register, Login, Refresh
+│       │   ├── listings.js     # Listing CRUD + approve/reject
+│       │   ├── transfers.js    # Kauf + Bestätigen + Ablehnen
+│       │   ├── organizations.js # Org-Einstellungen + Stripe
+│       │   └── webhooks.js     # Stripe Webhook Handler
+│       └── services/
+│           ├── stripe.js       # Stripe Connect Wrapper
+│           └── maps.js         # OpenStreetMap / Nominatim
+│
+├── widget/
+│   ├── index.html             # Widget-Übersicht
+│   ├── buyer-embed.html       # Iframe-Content für Buyer Widget
+│   ├── widget.js               # Buyer Widget JS
+│   ├── seller.html             # Seller Widget (Standalone)
+│   └── seller.js               # Seller Widget JS
+│
+└── dashboard/
+    ├── index.html             # Dashboard HTML
+    └── dashboard.js           # Dashboard JS
+```
 
 ---
 
@@ -149,5 +179,5 @@ Proprietary — Alle Rechte vorbehalten (Enflixed GmbH)
 
 ## Kontakt
 
-- Website: [storno-match.com](https://storno-match.com)
-- GitHub: [github.com/Enflixed/storno-match](https://github.com/Enflixed/storno-match)
+- **GitHub:** github.com/Enflixed/storno-match
+- **Projektleitung:** Dennis — E-Commerce, Condor Holidays

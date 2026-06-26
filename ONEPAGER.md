@@ -79,7 +79,7 @@ Reiseveranstalter
 |-------|------------|
 | Backend | Node.js + Express + Prisma |
 | Database | PostgreSQL (Railway) |
-| Frontend | React (Dashboard) + Vanilla JS (Widget) |
+| Frontend | Vanilla JS (Dashboard + Widget, kein Framework) |
 | Payments | Stripe Connect |
 | Email | Resend |
 | Hosting | Railway + Vercel |
@@ -88,10 +88,11 @@ Reiseveranstalter
 
 ## Next Steps
 
-1. 🔍 **Validierung** mit Branchenexperten
-2. 🏗️ **MVP fertigstellen** (Backend + Widget)
-3. 🎯 **3 Pilotkunden** gewinnen (kleine bis mittlere Veranstalter)
-4. 📈 **Skalieren** über Peakwork-Netzwerk
+1. ✅ **MVP fertig** — Backend + Widgets + Dashboard
+2. 🎯 **3 Pilotkunden** gewinnen (kleine bis mittlere Veranstalter)
+3. 💳 **Echtes Stripe Connect** — DEMO_MODE deaktivieren
+4. 📧 **Email-Benachrichtigungen** — Resend Integration
+5. 🚀 **Railway Deployment** — PostgreSQL + Production
 
 ---
 ## WIN WIN WIN?
@@ -123,4 +124,4 @@ Head of E-Commerce, Condor Holidays
 
 ---
 
-*Dies ist ein Konzept — noch nicht implementiert. MVP-Entwicklung kann kurzfristig starten.*
+*MVP fertig — Backend + Buyer Widget + Seller Widget + Admin Dashboard. Stripe in Demo Mode.*

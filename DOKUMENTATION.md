@@ -797,8 +797,8 @@ storno-match/
 
 ## 17. Kontakt
 
-**Dennis**  
-Head of E-Commerce - Condor Holidays
+**Dennis Magli**  
+E-Commerce Manager
 
 ---
 

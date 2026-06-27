@@ -180,4 +180,4 @@ Proprietary — Alle Rechte vorbehalten (Enflixed GmbH)
 ## Kontakt
 
 - **GitHub:** github.com/Enflixed/storno-match
-- **Projektleitung:** Dennis — E-Commerce, Condor Holidays
+

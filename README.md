@@ -173,7 +173,7 @@ storno-match/
 
 ## Lizenz
 
-Proprietary — Alle Rechte vorbehalten (Enflixed GmbH)
+Proprietary — Alle Rechte vorbehalten
 
 ---
 
